@@ -27,10 +27,20 @@ class MLMovieRecommender:
         self.ratings = pd.DataFrame()
         self.omdb_cache = self.load_cache()
         self.model = GradientBoostingRegressor(
-            n_estimators=150, learning_rate=0.1, max_depth=4, random_state=42)
+            n_estimators=200,
+            learning_rate=0.05,
+            max_depth=5,
+            min_samples_leaf=4,
+            random_state=42
+        )
 
         # NLP Vectorizer for Plot
-        self.tfidf = TfidfVectorizer(stop_words='english', max_features=300)
+        self.tfidf = TfidfVectorizer(
+            stop_words='english',
+            max_features=500,
+            max_df=0.5,
+            min_df=2
+        )
         self.mlb_genre = MultiLabelBinarizer()
 
     def load_cache(self):
@@ -44,13 +54,16 @@ class MLMovieRecommender:
             json.dump(self.omdb_cache, f)
 
     def fetch_omdb_data(self, imdb_id):
-        if imdb_id in self.omdb_cache:
-            return self.omdb_cache[imdb_id]
+        cached_data = self.omdb_cache.get(imdb_id)
+        if cached_data:
+            plot = cached_data.get('Plot', 'N/A')
+            if plot and plot != "N/A":
+                return cached_data
 
         # Rate limiting sleep
-        time.sleep(0.1)
+        time.sleep(0.2)
 
-        url = f"http://www.omdbapi.com/?i={imdb_id}&apikey={OMDB_API_KEY}"
+        url = f"http://www.omdbapi.com/?apikey={OMDB_API_KEY}&i={imdb_id}"
         try:
             response = requests.get(url)
             if response.status_code == 200:
@@ -58,8 +71,13 @@ class MLMovieRecommender:
                 if data.get('Response') == 'True':
                     self.omdb_cache[imdb_id] = data
                     return data
-        except Exception:
-            pass
+                else:
+                    print(f"OMDb API error for {imdb_id}: {data.get('Error')}")
+            else:
+                print(f"OMDb API error for {imdb_id}: {response.status_code}")
+
+        except Exception as e:
+            print(f"Error fetching OMDb data for {imdb_id}: {e}")
         return {}
 
     def clean_money(self, value):
@@ -85,9 +103,8 @@ class MLMovieRecommender:
         plots = []
         metascores = []
         box_offices = []
-        directors_avg_scores = []  # Feature Engineering: Director Track Record
 
-        # We need a dictionary of Director -> Avg Rating from the TRAINING set
+        # Director stats for target encoding
         if is_training:
             # Create a lookup for director averages
             self.director_stats = df.groupby(
