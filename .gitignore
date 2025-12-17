@@ -1,2 +1,4 @@
 /.venv
 .env
+omdb_cache.json
+*.csv
