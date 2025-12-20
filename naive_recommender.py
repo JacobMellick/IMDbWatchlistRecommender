@@ -121,75 +121,72 @@ class MovieRecommender:
 
         return score
 
-    def enrich_and_recommend(self, top_n=50):
+    def get_recommendations(self, top_n=50):
         """
-        1. Scores all watchlist items based on CSV data.
-        2. Takes the top N items.
-        3. Fetches OMDb data for those N items to find Actors/RottenTomatoes.
-        4. Re-scores and prints final recommendation.
+        Runs the full heuristic pipeline.
+        Returns a DataFrame sorted by Final_Score.
         """
+        # 1. Calculate Base Scores (CSV Data)
+        # We work on a copy to avoid SettingWithCopy warnings on the main watchlist
+        df = self.watchlist.copy()
+        df['Calc_Score'] = df.apply(self.calculate_score, axis=1)
 
-        # Initial Scoring based on CSV data only
-        self.watchlist['Calc_Score'] = self.watchlist.apply(
-            self.calculate_score, axis=1)
-
-        # Sort by initial score to get candidates
-        candidates = self.watchlist.sort_values(
+        # 2. Sort and take top N candidates for API enrichment
+        # (We don't want to API fetch the whole database, just the promising ones)
+        candidates = df.sort_values(
             by='Calc_Score', ascending=False).head(top_n).copy()
 
-        print(
-            f"\nFetching OMDb data for top {top_n} candidates to refine scores...")
-
         final_scores = []
+
+        # 3. Enrich with OMDb Data
+        print(f"Refining scores for top {top_n} candidates...")
 
         for index, row in candidates.iterrows():
             imdb_id = row['Const']
             omdb_data = self.fetch_omdb_data(imdb_id)
 
-            # Start with existing CSV score
             final_score = row['Calc_Score']
+
+            # Defaults
             actors_str = "N/A"
             plot_str = "No plot available"
+            rt_rating = "N/A"
 
             if omdb_data:
-                # OMDb Enrichment Logic
-
-                # 1. Metascore / Rotten Tomatoes boost
+                # Meta/RT Boost
                 ratings_sources = {r['Source']: r['Value']
                                    for r in omdb_data.get('Ratings', [])}
                 if 'Rotten Tomatoes' in ratings_sources:
-                    rt_score = int(
-                        ratings_sources['Rotten Tomatoes'].replace('%', ''))
+                    rt_rating = ratings_sources['Rotten Tomatoes']
+                    rt_score = int(rt_rating.replace('%', ''))
                     if rt_score > 80:
-                        final_score += 1.0  # Boost for critical acclaim
+                        final_score += 1.0
 
-                # 2. Actor Logic (Simple keyword check, can be expanded)
                 actors_str = omdb_data.get('Actors', 'N/A')
                 plot_str = omdb_data.get('Plot', 'N/A')
 
             final_scores.append({
+                'Const': imdb_id,  # Keep ID for reference
                 'Title': row['Title'],
                 'Year': row['Year'],
-                'IMDb': row['IMDb Rating'],
+                'Runtime (mins)': row['Runtime (mins)'],
+                'IMDb Rating': row['IMDb Rating'],
                 'Genres': row['Genres'],
                 'Final_Score': round(final_score, 2),
+                'Rotten_Tomatoes': rt_rating,
                 'Actors': actors_str,
                 'Plot': plot_str
             })
 
-            # Be nice to the API
+            # Simple rate limit if not cached
             if imdb_id not in self.omdb_cache:
                 time.sleep(0.1)
 
-        # Save cache for next time
         self.save_cache()
 
-        # Create Final DataFrame
-        recommendations = pd.DataFrame(final_scores)
-        recommendations = recommendations.sort_values(
-            by='Final_Score', ascending=False)
-
-        return recommendations.head(5)
+        # Return as DataFrame
+        results = pd.DataFrame(final_scores)
+        return results.sort_values(by='Final_Score', ascending=False)
 
 
 def main():

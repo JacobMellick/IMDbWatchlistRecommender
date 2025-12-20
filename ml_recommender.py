@@ -194,60 +194,54 @@ class MLMovieRecommender:
 
         return X
 
-    def run(self):
-        # 1. LOAD DATA
-        print("Loading CSVs...")
-        ratings = pd.read_csv(RATINGS_PATH)
-        ratings = ratings[ratings['Title Type'] == 'Movie'].copy()
+    def train(self):
+        """Loads ratings, prepares features, and trains the model."""
+        print("Loading and Training Model...")
 
-        # 2. PREPARE TRAINING DATA
-        # We need to drop movies with no rating (just in case)
-        ratings = ratings.dropna(subset=['Your Rating'])
-        y = ratings['Your Rating']
+        # 1. Load Data
+        self.ratings = pd.read_csv(RATINGS_PATH)
+        self.ratings = self.ratings[self.ratings['Title Type'] == 'Movie'].copy(
+        )
+        self.ratings = self.ratings.dropna(subset=['Your Rating'])
 
-        print(
-            f"Training on {len(ratings)} rated movies. (Fetching OMDb data if not cached...)")
-        X_train = self.prepare_features(ratings, is_training=True)
+        y = self.ratings['Your Rating']
 
-        # 3. TRAIN MODEL
-        print("Training Gradient Boosting Model...")
-        X_t, X_v, y_t, y_v = train_test_split(
-            X_train, y, test_size=0.2, random_state=42)
-        self.model.fit(X_t, y_t)
+        # 2. Prepare Features (is_training=True)
+        # Note: This uses the existing prepare_features method
+        X_train = self.prepare_features(self.ratings, is_training=True)
 
-        # Validate
-        preds = self.model.predict(X_v)
-        mae = mean_absolute_error(y_v, preds)
-        print(f"Model Trained. Average Prediction Error: +/- {mae:.2f} stars")
-
-        # Retrain on full data for best results
+        # 3. Fit Model
+        # We fit on the whole dataset for the final application
         self.model.fit(X_train, y)
+        print("Model trained successfully.")
 
-        # 4. PREPARE WATCHLIST
-        watchlist = pd.read_csv(WATCHLIST_PATH)
-        watchlist = watchlist[watchlist['Title Type'] == 'Movie'].copy()
+    def predict(self):
+        """Loads watchlist, generates features, and returns predictions."""
+        if not hasattr(self.model, "estimators_"):
+            print("Error: Model not trained yet. Call train() first.")
+            return pd.DataFrame()
 
-        print(f"Predicting ratings for {len(watchlist)} watchlist items...")
-        X_watchlist = self.prepare_features(watchlist, is_training=False)
+        # 1. Load Watchlist
+        self.watchlist = pd.read_csv(WATCHLIST_PATH)
+        self.watchlist = self.watchlist[self.watchlist['Title Type'] == 'Movie'].copy(
+        )
 
-        # 5. PREDICT
-        watchlist['Predicted_Rating'] = self.model.predict(X_watchlist)
+        # 2. Prepare Features (is_training=False)
+        X_watchlist = self.prepare_features(self.watchlist, is_training=False)
 
-        # 6. RESULTS
-        results = watchlist.sort_values(
-            by='Predicted_Rating', ascending=False).head(15)
+        # 3. Predict
+        self.watchlist['Predicted_Rating'] = self.model.predict(X_watchlist)
 
-        print("\n==========================================")
-        print("       AI RECOMMENDED MOVIES       ")
-        print("==========================================\n")
+        # 4. Attach Plot/Actors for display purposes
+        # We do a quick lookup in the cache we just built
+        plots = []
+        for idx, row in self.watchlist.iterrows():
+            data = self.omdb_cache.get(row['Const'], {})
+            plots.append(data.get('Plot', 'N/A'))
+        self.watchlist['Plot'] = plots
 
-        for i, row in results.iterrows():
-            print(f"Predicted Rating: {row['Predicted_Rating']:.2f}/10")
-            print(f"{row['Title']} ({row['Year']})")
-            print(f"Genre: {row['Genres']}")
-            omdb_data = self.omdb_cache.get(row['Const'], {})
-            print(f"Plot: {omdb_data.get('Plot', 'N/A')}")
-            print("-" * 40)
+        # Return sorted DataFrame
+        return self.watchlist.sort_values(by='Predicted_Rating', ascending=False)
 
 
 if __name__ == "__main__":
