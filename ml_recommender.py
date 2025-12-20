@@ -5,6 +5,8 @@ import os
 import numpy as np
 import time
 from dotenv import load_dotenv
+from tqdm import tqdm
+import sys
 
 # ML Imports
 from sklearn.ensemble import GradientBoostingRegressor
@@ -19,6 +21,11 @@ OMDB_API_KEY = os.getenv("OMDB_API_KEY")
 WATCHLIST_PATH = "watchlist.csv"
 RATINGS_PATH = "ratings.csv"
 CACHE_FILE = "omdb_cache.json"
+
+
+class OMDbLimitReached(Exception):
+    """Custom exception for when API limit is hit"""
+    pass
 
 
 class MLMovieRecommender:
@@ -66,6 +73,9 @@ class MLMovieRecommender:
         url = f"http://www.omdbapi.com/?apikey={OMDB_API_KEY}&i={imdb_id}"
         try:
             response = requests.get(url)
+            if response.status_code == 401:
+                raise OMDbLimitReached(
+                    "OMDb API limit reached or invalid API key.")
             if response.status_code == 200:
                 data = response.json()
                 if data.get('Response') == 'True':
@@ -76,8 +86,8 @@ class MLMovieRecommender:
             else:
                 print(f"OMDb API error for {imdb_id}: {response.status_code}")
 
-        except Exception as e:
-            print(f"Error fetching OMDb data for {imdb_id}: {e}")
+        except requests.exceptions.RequestException as e:
+            print(f"Network error for {imdb_id}: {e}")
         return {}
 
     def clean_money(self, value):
@@ -110,17 +120,28 @@ class MLMovieRecommender:
             self.director_stats = df.groupby(
                 'Directors')['Your Rating'].mean().to_dict()
 
-        for idx, row in df.iterrows():
-            imdb_id = row['Const']
-            omdb = self.fetch_omdb_data(imdb_id)
+        try:
+            loop_desc = "Training Data" if is_training else "Watchlist Data"
+            for idx, row in tqdm(df.iterrows(), total=df.shape[0], desc=loop_desc, unit="mov"):
+                imdb_id = row['Const']
+                omdb = self.fetch_omdb_data(imdb_id)
 
-            # 1. Text Data
-            plots.append(omdb.get('Plot', ''))
+                # 1. Text Data
+                plots.append(omdb.get('Plot', ''))
 
-            # 2. Numerical Data from OMDb
-            metascores.append(self.parse_metascore(
-                omdb.get('Metascore', 'N/A')))
-            box_offices.append(self.clean_money(omdb.get('BoxOffice', 'N/A')))
+                # 2. Numerical Data from OMDb
+                metascores.append(self.parse_metascore(
+                    omdb.get('Metascore', 'N/A')))
+                box_offices.append(self.clean_money(
+                    omdb.get('BoxOffice', 'N/A')))
+        except OMDbLimitReached as e:
+            print("\n" + "!" * 50)
+            print(f"CRITICAL: {e}")
+            print("Saving current progress to cache...")
+            self.save_cache()
+            print("Cache saved. Exiting program. Please try again later/tomorrow.")
+            print("!" * 50)
+            sys.exit(1)
 
         # Save cache after loop
         self.save_cache()
