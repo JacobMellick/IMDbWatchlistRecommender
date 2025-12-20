@@ -155,13 +155,12 @@ class MovieRecommender:
                 # OMDb Enrichment Logic
 
                 # 1. Metascore / Rotten Tomatoes boost
-                # (Example: Boost if Rotten Tomatoes > 80%)
                 ratings_sources = {r['Source']: r['Value']
                                    for r in omdb_data.get('Ratings', [])}
                 if 'Rotten Tomatoes' in ratings_sources:
                     rt_score = int(
                         ratings_sources['Rotten Tomatoes'].replace('%', ''))
-                    if rt_score > 85:
+                    if rt_score > 80:
                         final_score += 1.0  # Boost for critical acclaim
 
                 # 2. Actor Logic (Simple keyword check, can be expanded)
