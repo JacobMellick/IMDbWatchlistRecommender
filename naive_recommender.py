@@ -148,7 +148,6 @@ class MovieRecommender:
 
             # Start with existing CSV score
             final_score = row['Calc_Score']
-            meta_str = "N/A"
             actors_str = "N/A"
             plot_str = "No plot available"
 
@@ -166,8 +165,6 @@ class MovieRecommender:
                         final_score += 1.0  # Boost for critical acclaim
 
                 # 2. Actor Logic (Simple keyword check, can be expanded)
-                # You could analyze your ratings for actors, but here we just check overlap
-                # For now, we just store it for display
                 actors_str = omdb_data.get('Actors', 'N/A')
                 plot_str = omdb_data.get('Plot', 'N/A')
 
