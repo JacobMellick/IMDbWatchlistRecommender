@@ -13,8 +13,9 @@ You can run either:
 
 - Python 3.9+
 - Dependencies: see [requirements.txt](requirements.txt)
-- Files: [watchlist.csv](watchlist.csv), [ratings.csv](ratings.csv), [omdb_cache.json](omdb_cache.json)
-- OMDb API key in [.env](.env): `OMDB_API_KEY=your_key`
+- Files required at runtime (not committed): `watchlist.csv`, `ratings.csv`, `omdb_cache.json`
+- OMDb API key required in a `.env` file: `OMDB_API_KEY=your_key`
+- Get a free OMDb API key at https://www.omdbapi.com/ (free tier allows up to 1,000 requests/day)
 
 ## Data Export (IMDb)
 
@@ -72,12 +73,13 @@ python ml_recommender.py
 
 ## Caching & API
 
-- OMDb responses cached in [omdb_cache.json](omdb_cache.json).
+- OMDb responses cached in `omdb_cache.json`.
 - If the cache exists, it’s reused automatically.
+- Free OMDb keys allow up to 1,000 requests per day; both recommenders minimize calls and cache responses to stay within limits, but large watchlists/ratings may require multiple runs over several days.
 
 ## Troubleshooting
 
-- Missing OMDb key: set `OMDB_API_KEY` in [.env](.env).
+- Missing OMDb key: set `OMDB_API_KEY` in `.env`.
 - CSV columns differ: ensure IMDb exports match expected headers.
 - API throttling: scripts already sleep between requests.
 
@@ -85,5 +87,5 @@ python ml_recommender.py
 
 - [naive_recommender.py](naive_recommender.py): heuristic scorer via [`MovieRecommender`](naive_recommender.py)
 - [ml_recommender.py](ml_recommender.py): ML pipeline via [`MLMovieRecommender`](ml_recommender.py)
-- [watchlist.csv](watchlist.csv) / [ratings.csv](ratings.csv): IMDb exports
-- [requirements.txt](requirements.txt), [.env](.env), [omdb_cache.json](omdb_cache.json)
+- watchlist.csv / ratings.csv: IMDb exports (user-provided; not committed)
+- [requirements.txt](requirements.txt)
