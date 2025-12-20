@@ -1,91 +1,109 @@
-# IMDbWatchlistRecommender
+# IMDb Watchlist Recommender
 
-A simple movie recommender for people who just can't choose.
+A smart movie recommender system for people who have too many movies in their watchlist and can't decide what to watch.
 
 ## Overview
 
-You can run either:
+This application analyzes your IMDb **Ratings** and **Watchlist** to provide personalized recommendations. It features a unified CLI with two distinct recommendation engines:
 
-- Naive scoring recommender: [`MovieRecommender`](naive_recommender.py)
-- ML-based recommender: [`MLMovieRecommender`](ml_recommender.py)
+1.  **Weighted Heuristic Engine:** Best for finding movies that match your specific taste profile (favorite directors, preferred genres, critical acclaim).
+2.  **Machine Learning Engine (Gradient Boosting):** Best for discovering "hidden gems" by learning your implicit rating patterns based on plot keywords, metadata, and voting history.
+
+**Key Features:**
+
+- Interactive CLI with rich visuals (tables, progress bars).
+- Automatic caching of OMDb API data to minimize requests.
+- Graceful handling of API rate limits (saves progress automatically).
+- Post-recommendation filtering (by Runtime, Genre, etc.).
 
 ## Requirements
 
 - Python 3.9+
-- Dependencies: see [requirements.txt](requirements.txt)
-- Files required at runtime (not committed): `watchlist.csv`, `ratings.csv`, `omdb_cache.json`
-- OMDb API key required in a `.env` file: `OMDB_API_KEY=your_key`
-- Get a free OMDb API key at https://www.omdbapi.com/ (free tier allows up to 1,000 requests/day)
-
-## Data Export (IMDb)
-
-1. Export Watchlist: IMDb → Your Lists → Export → save as `watchlist.csv`.
-2. Export Ratings: IMDb → Your Ratings → Export → save as `ratings.csv`.
+- **Data Files (User Provided):** `watchlist.csv`, `ratings.csv`
+- **API Key:** OMDb API key (Free tier allowed).
 
 ## Setup
 
+### 1. Environment
+
 ```sh
+# Create virtual environment
 python -m venv .venv
-. .venv/Scripts/activate   # Windows
+
+# Activate (Windows)
+. .venv/Scripts/activate
+# Activate (Mac/Linux)
+source .venv/bin/activate
+
+# Install dependencies
 pip install -r requirements.txt
 ```
 
-Create `.env` with your OMDb key:
+### 2. OMDb API Key
 
-```sh
-OMDB_API_KEY=your_key
+Get a free key at [omdbapi.com](https://www.omdbapi.com/) (1,000 requests/day).
+Create a `.env` file in the root directory:
+
+```env
+OMDB_API_KEY=your_key_here
 ```
 
-## Option A: Naive Recommender
+### 3. Data Export (IMDb)
 
-Runs a weighted heuristic based on IMDb ratings, genres, and director bonuses.
+You must export your data from IMDb and place the CSV files in the project root.
 
-- Weights in [naive_recommender.py](naive_recommender.py):
-  - [`WEIGHT_IMDB`](naive_recommender.py), [`WEIGHT_GENRE`](naive_recommender.py), [`BONUS_DIRECTOR`](naive_recommender.py)
-- Core flow: [`MovieRecommender.load_data`](naive_recommender.py) → [`MovieRecommender.analyze_user_preferences`](naive_recommender.py) → [`MovieRecommender.enrich_and_recommend`](naive_recommender.py)
+1.  **Watchlist:** IMDb → Your Lists → Export → save as `watchlist.csv`.
+2.  **Ratings:** IMDb → Your Ratings → Export → save as `ratings.csv`.
 
-Run:
+> **Note:** Ensure headers match standard IMDb exports (e.g., 'Const', 'Your Rating', 'Title Type', 'Directors', etc.).
 
-```sh
-python naive_recommender.py
-```
+## Usage
 
-Adjust candidate pool via `top_n` in [`MovieRecommender.enrich_and_recommend`](naive_recommender.py).
-
-## Option B: ML Recommender
-
-Trains a Gradient Boosting model on your ratings and predicts your watchlist scores.
-
-- Pipeline: [`MLMovieRecommender.run`](ml_recommender.py)
-- Feature building: [`MLMovieRecommender.prepare_features`](ml_recommender.py)
-- OMDb fetch/caching: [`MLMovieRecommender.fetch_omdb_data`](ml_recommender.py)
-
-Run:
+Run the unified controller:
 
 ```sh
-python ml_recommender.py
+python main.py
 ```
 
-## Output
+Follow the on-screen prompts:
 
-- Naive: Top 5 with score, IMDb, genres, actors, plot.
-- ML: Top 15 with predicted rating, genres, plot.
+1.  **Select Engine:** Choose between _Weighted Heuristic_ or _Gradient Boosting AI_.
+2.  **Processing:**
+    - The AI engine will train on your ratings and predict watchlist scores.
+    - The Heuristic engine will analyze your preferences and score candidates.
+    - _Note: First run will be slower as it fetches metadata from OMDb._
+3.  **Filtering:** Optionally filter results by max runtime (e.g., "< 120 mins") or specific moods.
+4.  **View Details:** Select specific movies from the result table to see plot summaries, actors, and more.
 
-## Caching & API
+## The Engines
 
-- OMDb responses cached in `omdb_cache.json`.
-- If the cache exists, it’s reused automatically.
-- Free OMDb keys allow up to 1,000 requests per day; both recommenders minimize calls and cache responses to stay within limits, but large watchlists/ratings may require multiple runs over several days.
+### Naive Recommender (Heuristic)
 
-## Troubleshooting
+- **Logic:** Calculates a score based on weighted factors:
+  - IMDb Rating (50%)
+  - Genre match against your history (30%)
+  - Bonus points for your favorite Directors and Actors.
+  - Bonus points for high Rotten Tomatoes scores (via OMDb).
+- **Best for:** "I want to watch something safe that aligns with what I usually like."
 
-- Missing OMDb key: set `OMDB_API_KEY` in `.env`.
-- CSV columns differ: ensure IMDb exports match expected headers.
-- API throttling: scripts already sleep between requests.
+### ML Recommender (Gradient Boosting)
+
+- **Logic:** Uses `sklearn.ensemble.GradientBoostingRegressor`.
+  - **Features:** Year, Runtime, Box Office, Metascore, One-Hot Encoded Genres, Target Encoded Directors, and **TF-IDF Vectorized Plot Summaries**.
+  - It learns _why_ you rate movies high or low based on the content of the plot and metadata.
+- **Best for:** "Surprise me with something I might like, even if it's a genre I rarely watch."
+
+## Caching & API Limits
+
+- **Cache:** All OMDb API responses are saved to `omdb_cache.json`. This file is loaded automatically on every run.
+- **Rate Limits:** The free OMDb key has a 1,000 call/day limit.
+  - The scripts include sleep timers to be polite to the API.
+  - If you hit the daily limit (HTTP 401), the application will **automatically save your progress** and exit safely. You can simply run it again tomorrow to pick up where you left off.
 
 ## Project Structure
 
-- [naive_recommender.py](naive_recommender.py): heuristic scorer via [`MovieRecommender`](naive_recommender.py)
-- [ml_recommender.py](ml_recommender.py): ML pipeline via [`MLMovieRecommender`](ml_recommender.py)
-- watchlist.csv / ratings.csv: IMDb exports (user-provided; not committed)
-- [requirements.txt](requirements.txt)
+- `main.py`: The CLI controller and UI logic.
+- `ml_recommender.py`: Machine Learning pipeline class.
+- `naive_recommender.py`: Heuristic rule-based class.
+- `watchlist.csv` / `ratings.csv`: Your data (git-ignored).
+- `omdb_cache.json`: Local data cache (git-ignored).
